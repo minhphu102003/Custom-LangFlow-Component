@@ -24,10 +24,6 @@ print("=" * 40)
 
 # List of components to test
 components = [
-    ("SimpleDataFrameProcessor", "processors.simple_dataframe_processor"),
-    ("ParallelDataFrameProcessor", "processors.parallel_dataframe_processor"),
-    ("IntegratedParallelProcessor", "processors.integrated_parallel_processor"),
-    ("ParallelQueryProcessor", "processors.parallel_query_processor"),
     ("ParallelAgentProcessor", "processors.parallel_agent_processor"),
     ("BaseProcessor", "processors.base_processor"),
     ("utils", "utils.utils"),

@@ -1,0 +1,20 @@
+[project]
+name = "custom_components"
+version = "0.1.0"
+description = "Custom components for Langflow"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "langflow>=0.1.0",
+    "pytest>=6.0.0",
+    "python-dotenv>=0.19.0",
+]
+
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.uv]
+dev-dependencies = [
+    # Add any development dependencies here
+]

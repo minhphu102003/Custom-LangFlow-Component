@@ -8,6 +8,8 @@ server via SSE to answer queries based on the text value in each record.
 The number of workers is dynamically determined based on the number of records in the DataFrame.
 """
 
+import sys
+import os
 from typing import List, Dict, Any, Callable, Optional
 from langflow.custom import Component
 from langflow.field_typing import Data, Tool
@@ -16,14 +18,36 @@ from langflow.inputs.inputs import StrInput, HandleInput
 import json
 import concurrent.futures
 
-# Import the base class
+# Import the base processor
 from .base_processor import BaseProcessor
 
 # Import result processing functions
-from ..utils.result_processing import combine_results_as_string, create_detailed_results_data, create_error_result_data
+try:
+    from utils.result_processing import combine_results_as_string, create_detailed_results_data, create_error_result_data
+except ImportError:
+    try:
+        from ..utils.result_processing import combine_results_as_string, create_detailed_results_data, create_error_result_data
+    except ImportError:
+        # Fallback implementations if imports fail
+        def combine_results_as_string(results: List[Dict[str, Any]], separator: str = "\n") -> str:
+            if not results:
+                return ""
+            return separator.join([str(result.get("response", "")) for result in results])
+        
+        def create_detailed_results_data(results: List[Dict[str, Any]], processor_type: str = "generic", additional_stats: Optional[Dict[str, Any]] = None) -> Data:
+            return Data(data={"results": results, "processor_type": processor_type})
+        
+        def create_error_result_data(error_message: str) -> Data:
+            return Data(data={"error": error_message})
 
-# Import the agent component wrapper
-from .agent_component_wrapper import AgentComponentWrapper
+# Import the AgentComponent
+try:
+    from processors.agent_component import AgentComponent
+except ImportError:
+    try:
+        from .agent_component import AgentComponent
+    except ImportError:
+        AgentComponent = None
 
 class ParallelAgentProcessor(BaseProcessor):
     display_name = "Parallel Agent Processor"
@@ -39,25 +63,25 @@ class ParallelAgentProcessor(BaseProcessor):
             info="Input DataFrame with a 'text' column to process"
         ),
         StrInput(
-            name="agent_count",
-            display_name="Agent Count",
-            info="Number of agents to use for processing each query (default: 3)",
-            advanced=True,
-            value="3"
-        ),
-        StrInput(
-            name="max_workers",
-            display_name="Max Workers",
-            info="Maximum number of parallel workers (default: based on DataFrame size, max 10)",
-            advanced=True,
-            value=""
-        ),
-        StrInput(
             name="system_prompt",
             display_name="Agent System Prompt",
             info="System prompt for the agents that process queries",
             advanced=True,
             value="You are a helpful assistant that can use tools to answer questions and perform tasks."
+        ),
+        StrInput(
+            name="agent_llm",
+            display_name="Agent LLM Provider",
+            info="Language model provider for the agents",
+            advanced=True,
+            value="Google Generative AI"
+        ),
+        StrInput(
+            name="model_name",
+            display_name="Model Name",
+            info="Specific model name to use for the agents",
+            advanced=True,
+            value="gemini-2.0-flash-001"
         ),
         HandleInput(
             name="mcp_server",
@@ -102,74 +126,86 @@ class ParallelAgentProcessor(BaseProcessor):
         else:
             return 10
     
-    def _process_single_query_with_multiple_agents(self, query_text: str) -> Dict[str, Any]:
+    def _process_single_query_with_agent(self, query_text: str) -> Dict[str, Any]:
         """
-        Process a single query using multiple AgentComponent instances with MCP server tools via SSE.
+        Process a single query using one AgentComponent instance.
         
         Args:
             query_text (str): The text value from the DataFrame row to process
             
         Returns:
-            Dict[str, Any]: Result from processing this query with multiple agents
+            Dict[str, Any]: Result from processing this query
         """
         try:
-            # Get the number of agents to use
-            agent_count = int(getattr(self, "agent_count", "3")) or 3
-            
             # Get system prompt
             system_prompt = getattr(self, "system_prompt", "You are a helpful assistant that can use tools to answer questions and perform tasks.")
             
             # Get MCP server if available
             mcp_server = getattr(self, "mcp_server", None)
             
-            # Import the agent component class
-            from .agent_implementation_example import ResponseEnhancementAgent
+            # Get model configuration if available
+            agent_llm = getattr(self, "agent_llm", "Google Generative AI")
+            model_name = getattr(self, "model_name", "gemini-2.0-flash-001")
             
-            # Create multiple agents and process the query
-            agent_responses = []
-            tools_called = []
-            agents_called = []
+            # Check if AgentComponent is available
+            if AgentComponent is None:
+                raise ImportError("AgentComponent could not be imported")
             
-            # Process query with multiple agents
-            for i in range(agent_count):
-                # Create agent component wrapper with the required agent_component_class parameter
-                agent_wrapper = AgentComponentWrapper(
-                    agent_component_class=ResponseEnhancementAgent,
-                    system_prompt=system_prompt,
-                    mcp_server=mcp_server
-                )
-                
-                # Process the query with this agent
-                agent_result = agent_wrapper.process_query(query_text)
-                agent_responses.append(agent_result)
-                
-                # Track agents and tools called
-                agents_called.append(f"Agent_{i+1}")
-                if 'tools_called' in agent_result:
-                    tools_called.extend(agent_result['tools_called'])
+            # Create agent component instance
+            agent = AgentComponent()
             
-            # Combine results from all agents
-            combined_response = {
+            # Set parameters for the agent
+            agent.system_prompt = system_prompt
+            # Create a proper Message object for input_value
+            from langflow.schema.message import Message
+            agent.input_value = Message(text=query_text)
+            agent.add_current_date_tool = True
+            
+            # Set model configuration
+            agent.agent_llm = agent_llm
+            agent.model_name = model_name
+            
+            # Set Google API key from environment variable
+            google_api_key = os.getenv("GOOGLE_API_KEY")
+            if google_api_key:
+                agent.api_key = google_api_key
+            
+            # Add MCP server tool if available
+            if mcp_server:
+                # Initialize tools list if it doesn't exist
+                if not hasattr(agent, 'tools') or agent.tools is None:
+                    agent.tools = []
+                # Add the MCP server tool to the agent's tools
+                if isinstance(agent.tools, list):
+                    agent.tools.append(mcp_server)
+                else:
+                    agent.tools = [mcp_server]
+            
+            # Process the query with this agent
+            import asyncio
+            try:
+                # Try to get the current event loop
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                # If no event loop exists, create a new one
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            # Run the async method in the event loop
+            response = loop.run_until_complete(agent.message_response())
+            
+            return {
                 "query": query_text,
-                "response": [result.get("response", "") for result in agent_responses],
-                "agents_called": agents_called,
-                "tools_called": list(set(tools_called)),  # Remove duplicates
-                "agent_responses": agent_responses,
-                "processing_time": sum(result.get("processing_time", 0) for result in agent_responses if "processing_time" in result),
+                "response": response.text if hasattr(response, 'text') else str(response),
+                "success": True,
                 "error": None
             }
             
-            return combined_response
-            
         except Exception as e:
-            # Return error result if processing fails
             return {
                 "query": query_text,
-                "response": f"Error processing query: {str(e)}",
-                "agents_called": [],
-                "tools_called": [],
-                "agent_responses": [],
-                "processing_time": 0,
+                "response": None,
+                "success": False,
                 "error": str(e)
             }
     
@@ -187,15 +223,10 @@ class ParallelAgentProcessor(BaseProcessor):
             
             # Determine optimal number of workers based on DataFrame size
             record_count = len(text_values)
-            if hasattr(self, "max_workers") and self.max_workers:
-                # Use specified max_workers if provided
-                max_workers = self._parse_max_workers(self.max_workers, default=self._determine_optimal_workers(record_count))
-            else:
-                # Automatically determine based on record count
-                max_workers = self._determine_optimal_workers(record_count)
+            max_workers = self._determine_optimal_workers(record_count)
             
             # Process rows in parallel using the base class method
-            results = self._process_rows_parallel(text_values, self._process_single_query_with_multiple_agents, max_workers)
+            results = self._process_rows_parallel(text_values, self._process_single_query_with_agent, max_workers)
             
             # Combine all results into a single string using the result processing module
             return combine_results_as_string(results)
@@ -217,15 +248,10 @@ class ParallelAgentProcessor(BaseProcessor):
             
             # Determine optimal number of workers based on DataFrame size
             record_count = len(text_values)
-            if hasattr(self, "max_workers") and self.max_workers:
-                # Use specified max_workers if provided
-                max_workers = self._parse_max_workers(self.max_workers, default=self._determine_optimal_workers(record_count))
-            else:
-                # Automatically determine based on record count
-                max_workers = self._determine_optimal_workers(record_count)
+            max_workers = self._determine_optimal_workers(record_count)
             
             # Process rows in parallel using the base class method
-            results = self._process_rows_parallel(text_values, self._process_single_query_with_multiple_agents, max_workers)
+            results = self._process_rows_parallel(text_values, self._process_single_query_with_agent, max_workers)
             
             # Return as Langflow Data object using the result processing module
             return create_detailed_results_data(results, processor_type="parallel_agents")

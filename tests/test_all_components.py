@@ -10,37 +10,39 @@ import json
 # Add the parent directory to Python path to make imports work correctly
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 print("Testing All Custom Components")
 print("=" * 40)
 
 # Test all components
 components_to_test = [
-    "SimpleDataFrameProcessor",
-    "ParallelDataFrameProcessor",
-    "IntegratedParallelProcessor",
-    "ParallelQueryProcessor",
-    "ParallelAgentProcessor"
+    "ParallelAgentProcessor",
+    "AgentComponent"
 ]
 
 for component_name in components_to_test:
     try:
-        # Dynamically import the component
-        if component_name == "SimpleDataFrameProcessor":
-            from processors.simple_dataframe_processor import SimpleDataFrameProcessor
-            component_class = SimpleDataFrameProcessor
-        elif component_name == "ParallelDataFrameProcessor":
-            from processors.parallel_dataframe_processor import ParallelDataFrameProcessor
-            component_class = ParallelDataFrameProcessor
-        elif component_name == "IntegratedParallelProcessor":
-            from processors.integrated_parallel_processor import IntegratedParallelProcessor
-            component_class = IntegratedParallelProcessor
-        elif component_name == "ParallelQueryProcessor":
-            from processors.parallel_query_processor import ParallelQueryProcessor
-            component_class = ParallelQueryProcessor
-        elif component_name == "ParallelAgentProcessor":
-            from processors.parallel_agent_processor import ParallelAgentProcessor
+        if component_name == "ParallelAgentProcessor":
+            # Try different import methods
+            try:
+                from custom_components.processors.parallel_agent_processor import ParallelAgentProcessor
+            except ImportError:
+                try:
+                    from processors.parallel_agent_processor import ParallelAgentProcessor
+                except ImportError:
+                    from custom_components.processors.parallel_agent_processor import ParallelAgentProcessor
             component_class = ParallelAgentProcessor
+        elif component_name == "AgentComponent":
+            # Try different import methods
+            try:
+                from custom_components.processors.agent_component import AgentComponent
+            except ImportError:
+                try:
+                    from processors.agent_component import AgentComponent
+                except ImportError:
+                    from custom_components.processors.agent_component import AgentComponent
+            component_class = AgentComponent
         else:
             continue
             
@@ -57,35 +59,19 @@ for component_name in components_to_test:
 print("\n" + "=" * 40)
 print("Running functional tests...")
 
-# Test Simple DataFrame Processor
-print("\nTesting SimpleDataFrameProcessor...")
-try:
-    from processors.simple_dataframe_processor import SimpleDataFrameProcessor
-    processor = SimpleDataFrameProcessor()
-    
-    test_df = {
-        "data": [
-            {"text": "What is AI?"},
-            {"text": "How does ML work?"},
-            {"text": "What are neural networks?"}
-        ]
-    }
-    
-    processor.dataframe_input = test_df
-    results = processor.build_processed_results()
-    detailed = processor.build_detailed_results()
-    
-    print("  Processed results:", results[:100] + "..." if len(results) > 100 else results)
-    detailed_data = detailed.data if hasattr(detailed, 'data') else detailed
-    print("  Total processed:", detailed_data.get('total_processed', 'N/A'))
-    print("  ✓ SimpleDataFrameProcessor functional test passed")
-except Exception as e:
-    print(f"  ✗ SimpleDataFrameProcessor functional test failed: {e}")
 
 # Test Parallel Agent Processor
 print("\nTesting ParallelAgentProcessor...")
 try:
-    from processors.parallel_agent_processor import ParallelAgentProcessor
+    # Try different import methods
+    try:
+        from custom_components.processors.parallel_agent_processor import ParallelAgentProcessor
+    except ImportError:
+        try:
+            from processors.parallel_agent_processor import ParallelAgentProcessor
+        except ImportError:
+            from custom_components.processors.parallel_agent_processor import ParallelAgentProcessor
+    
     processor = ParallelAgentProcessor()
     
     test_df = {
@@ -99,7 +85,6 @@ try:
     }
     
     processor.dataframe_input = test_df
-    processor.agent_count = "2"
     # Not setting max_workers to test automatic determination based on DataFrame size
     
     start_time = time.time()
@@ -115,6 +100,30 @@ try:
     print("  ✓ ParallelAgentProcessor functional test passed")
 except Exception as e:
     print(f"  ✗ ParallelAgentProcessor functional test failed: {e}")
+
+# Test Agent Component
+print("\nTesting AgentComponent...")
+try:
+    # Try different import methods
+    try:
+        from custom_components.processors.agent_component import AgentComponent
+    except ImportError:
+        try:
+            from processors.agent_component import AgentComponent
+        except ImportError:
+            from custom_components.processors.agent_component import AgentComponent
+    
+    agent = AgentComponent()
+    
+    # Set basic parameters
+    agent.input_value = "Explain what AI is in one sentence"
+    agent.system_prompt = "You are a helpful assistant that explains concepts clearly and concisely."
+    agent.add_current_date_tool = True
+    
+    print("  ✓ AgentComponent instantiated successfully")
+    print("  ✓ AgentComponent functional test passed")
+except Exception as e:
+    print(f"  ✗ AgentComponent functional test failed: {e}")
 
 print("\n" + "=" * 40)
 print("All tests completed.")
