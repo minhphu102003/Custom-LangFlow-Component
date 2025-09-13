@@ -18,7 +18,8 @@ print("=" * 40)
 # Test all components
 components_to_test = [
     "ParallelAgentProcessor",
-    "AgentComponent"
+    "AgentComponent",
+    "TextExtractor"
 ]
 
 for component_name in components_to_test:
@@ -34,15 +35,25 @@ for component_name in components_to_test:
                     from custom_components.processors.parallel_agent_processor import ParallelAgentProcessor
             component_class = ParallelAgentProcessor
         elif component_name == "AgentComponent":
-            # Try different import methods
+            # Try different import methods for the new location
             try:
-                from custom_components.processors.agent_component import AgentComponent
+                from custom_components.helpers.agent_component import AgentComponent
             except ImportError:
                 try:
-                    from processors.agent_component import AgentComponent
+                    from helpers.agent_component import AgentComponent
                 except ImportError:
-                    from custom_components.processors.agent_component import AgentComponent
+                    from custom_components.helpers.agent_component import AgentComponent
             component_class = AgentComponent
+        elif component_name == "TextExtractor":
+            # Try different import methods
+            try:
+                from custom_components.processors.text_extractor import TextExtractor
+            except ImportError:
+                try:
+                    from processors.text_extractor import TextExtractor
+                except ImportError:
+                    from custom_components.processors.text_extractor import TextExtractor
+            component_class = TextExtractor
         else:
             continue
             
@@ -104,14 +115,14 @@ except Exception as e:
 # Test Agent Component
 print("\nTesting AgentComponent...")
 try:
-    # Try different import methods
+    # Try different import methods for the new location
     try:
-        from custom_components.processors.agent_component import AgentComponent
+        from custom_components.helpers.agent_component import AgentComponent
     except ImportError:
         try:
-            from processors.agent_component import AgentComponent
+            from helpers.agent_component import AgentComponent
         except ImportError:
-            from custom_components.processors.agent_component import AgentComponent
+            from custom_components.helpers.agent_component import AgentComponent
     
     agent = AgentComponent()
     
@@ -124,6 +135,38 @@ try:
     print("  ✓ AgentComponent functional test passed")
 except Exception as e:
     print(f"  ✗ AgentComponent functional test failed: {e}")
+
+# Test Text Extractor
+print("\nTesting TextExtractor...")
+try:
+    # Try different import methods
+    try:
+        from custom_components.processors.text_extractor import TextExtractor
+    except ImportError:
+        try:
+                    from processors.text_extractor import TextExtractor
+        except ImportError:
+            from custom_components.processors.text_extractor import TextExtractor
+    
+    extractor = TextExtractor()
+    
+    # Test with sample data
+    test_data = {
+        "data": [
+            {"text": "First sample text"},
+            {"text": "Second sample text"},
+            {"text": "Third sample text"}
+        ]
+    }
+    
+    extractor.data = test_data
+    extracted = extractor.extract_text()
+    
+    print(f"  Extracted {len(extracted)} text items")
+    print("  Sample extracted text:", extracted[0] if extracted else "None")
+    print("  ✓ TextExtractor functional test passed")
+except Exception as e:
+    print(f"  ✗ TextExtractor functional test failed: {e}")
 
 print("\n" + "=" * 40)
 print("All tests completed.")
