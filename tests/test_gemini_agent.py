@@ -22,8 +22,15 @@ print("Testing AgentComponent with Gemini")
 print("=" * 40)
 
 try:
-    # Import the AgentComponent
-    from processors.agent_component import AgentComponent
+    # Import the AgentComponent from the new location
+    try:
+        from helpers.agent_component import AgentComponent
+    except ImportError:
+        try:
+            from custom_components.helpers.agent_component import AgentComponent
+        except ImportError:
+            from custom_components.helpers.agent_component import AgentComponent
+    
     from langflow.schema.message import Message
     
     # Create an instance of AgentComponent following the exact pattern from parallel_agent_processor.py
@@ -31,8 +38,13 @@ try:
     
     # Set parameters for the agent (matching the parallel processor setup exactly)
     agent.system_prompt = "You are a helpful AI assistant that explains concepts clearly and concisely."
-    # Create a proper Message object for input_value
-    agent.input_value = Message(text="Explain what artificial intelligence is in one paragraph.")
+    # Create a proper Message object for input_value with all required attributes
+    agent.input_value = Message(
+        text="Explain what artificial intelligence is in one paragraph.",
+        session_id="test_session",
+        sender="User",
+        sender_name="TestUser"
+    )
     agent.add_current_date_tool = True
     
     # Set model configuration
@@ -44,7 +56,7 @@ try:
     if google_api_key:
         agent.api_key = google_api_key
     
-    # Mock the get_memory_data method to avoid session_id validation issues
+    # Override the get_memory_data method to avoid graph.session_id access issues in testing
     async def mock_get_memory_data():
         return []
     
@@ -52,13 +64,6 @@ try:
     
     # Set required attributes for proper initialization
     agent.session_id = "test_session"
-    # Create a mock graph object with session_id using a proper approach
-    class MockGraph:
-        def __init__(self):
-            self.session_id = "test_session"
-    
-    # Use object.__setattr__ to bypass property restrictions
-    object.__setattr__(agent, 'graph', MockGraph())
     
     # Initialize tools as an empty list if not already set
     if not hasattr(agent, 'tools') or agent.tools is None:
